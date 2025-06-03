@@ -1,16 +1,15 @@
 // test_input.cpp - a test driver for untou3::UNtoU3 class.
 //
-// Program implements the U(N) to U(3) the input irrep [f] specified by the HO
-// level n, N=(n+1)*(n+2)/2, and the elements of its representation R =
-// [r_4,r_3,r_2,r_1,r_0] read from the standard input. For instance, for the
-// input irrep [f] = [4,2,2,2,2,0], the user should provide the following input:
-// 2 1 0 4 0 1.
+// Program implements the U(N) to U(3) reduction for the input irrep [f]
+// specified by the HO level n, N=(n+1)*(n+2)/2, and the elements of its
+// representation R = [r_4,r_3,r_2,r_1,r_0] read from the standard input. For
+// instance, for the input irrep [f] = [4,2,2,2,2,0], the user should provide
+// the following input: 2 1 0 4 0 1.
 //
 // The program performs the U(N) to U(3) reduction, calculates the sum of the
-// dimensions of resulting U(3) irrpes multiplied by their level
-// dimensionalities, and prints it to the standard output. For instance, for the
-// input irrep specified above, the output should read: U(3) irreps total dim =
-// 405
+// dimensions of resulting U(3) irrpes multiplied by their multiplicities,
+// and prints it to the standard output. For instance, for the input irrep
+// specified above, the output should read: U(3) irreps total dim = 405
 //
 // This sum should be equal to dim[f], which can be calculated analytically with
 // the support of rational numbers. The program performs this calculcation as
@@ -21,6 +20,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <iostream>
 #include <iterator>
 #include <stdexcept>
@@ -54,20 +54,14 @@ unsigned long dim(const T& irrep)
 }
 #endif
 
-// Implements analytical formula for calculcation of a dimension of an input
-// U(3) irrep. (Does not require rational arithmetics.)
-unsigned long dim(const untou3::UNtoU3<4>::U3Weight& irrep)
-{
-  return (irrep[0] - irrep[1] + 1) * (irrep[0] - irrep[2] + 2) *
-         (irrep[1] - irrep[2] + 1) / 2;
-}
-
 int main()
 {
   // HO level
   unsigned long n;
+
   // specification of intput U(N) irrep
   unsigned int n4, n3, n2, n1, n0;
+
   std::cin >> n >> n4 >> n3 >> n2 >> n1 >> n0;
 
   if (n4 + n3 + n2 + n1 + n0 != (n + 1) * (n + 2) / 2)
@@ -83,19 +77,20 @@ int main()
   std::cout << "U(N) irrep dim = " << dim(f) << std::endl;
 #endif
 
+  // maximum U(N) irrep label = 4
   untou3::UNtoU3<4> gen;
-  // generate HO vectors for a given n
-  gen.generateXYZ(n);
+
+  // set HO level
+  gen.set_shell(n);
 
 #ifdef MEASURE_TIME
   auto start = std::chrono::high_resolution_clock::now();
 #endif
 
-  // generation of U(3) irreps in the input U(N) irrep [f]
-  gen.generateU3Weights({static_cast<short>(n4), static_cast<short>(n3),
-                         static_cast<short>(n2), static_cast<short>(n1),
-                         static_cast<short>(n0)},
-                        (n + 1) * (n + 2) / 2);
+  // U(N) to U(3) reduction
+  gen.reduce({static_cast<int16_t>(n4), static_cast<int16_t>(n3),
+              static_cast<int16_t>(n2), static_cast<int16_t>(n1),
+              static_cast<int16_t>(n0)});
 
 #ifdef MEASURE_TIME
   auto end = std::chrono::high_resolution_clock::now();
@@ -104,18 +99,12 @@ int main()
             << std::endl;
 #endif
 
-  // calculated sum
-  unsigned long sum = 0;
-  // iteration over generated U(3) weights
-  for (const auto& pair : gen.multMap())
-  {
-    // get U(3) weight lables
-    const auto& weight = pair.first;
-    // get its level dimensionality if its nonzero and the U(3) weight is a U(3)
-    // irrep
-    if (auto D_l = gen.getLevelDimensionality(weight))
-      // add contribution of this U(3) irrep to the sum
-      sum += D_l * dim(weight);
-  }
-  std::cout << "U(3) irreps total dim = " << sum << std::endl;
+  // resulting U(3) irreps
+  auto res = gen.irreps();
+
+  long total_dim = 0;
+  for (const auto& [i, m] : res)
+    total_dim += m * i.dim();
+
+  std::cout << "U(3) irreps total dim = " << total_dim << std::endl;
 }

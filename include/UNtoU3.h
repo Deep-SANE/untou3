@@ -32,7 +32,7 @@ namespace untou3
     //
     // Example: L = 4, r = { 1, 0, 4, 0, 1 }
     // represesents Gelfand pattern row [ 4, 2, 2, 2, 2, 0 ]
-    using GRP_rep = std::array<int16_t, L + 1>;
+    using GPR_rep = std::array<int16_t, L + 1>;
 
   private:
     using U3Weight = std::array<uint32_t, 3>; // representation of U(3) weight
@@ -62,7 +62,7 @@ namespace untou3
     using U3MultMap = std::unordered_map<U3Weight, uint32_t, U3Weight_hasher>;
 
     // type of elements in resulting table (difference + weight vector element)
-    using Element_type = std::pair<GRP_rep, uint32_t>;
+    using Element_type = std::pair<GPR_rep, uint32_t>;
 
     // database of "differences" between Galfend pattern rows:
     class Diffs
@@ -86,14 +86,14 @@ namespace untou3
       }
 
       // set of differences for Gelfand pattern row representation:
-      std::span<Element_type> get_gpr(const GRP_rep& gpr)
+      std::span<Element_type> get_gpr(const GPR_rep& gpr)
       {
         auto bin = gpr_to_bin(gpr);
         return get_bin(bin);
       }
 
     private:
-      int64_t get_weight(const GRP_rep& diff)
+      int64_t get_weight(const GPR_rep& diff)
       {
         int64_t res = 0;
 
@@ -106,8 +106,8 @@ namespace untou3
         return res;
       }
 
-      void generate_rules_recursive(const uint64_t bin, const GRP_rep& gpr,
-                                    GRP_rep diff, int first)
+      void generate_rules_recursive(const uint64_t bin, const GPR_rep& gpr,
+                                    GPR_rep diff, int first)
       {
         // find second nonzero:
         int second = first + 1;
@@ -135,7 +135,7 @@ namespace untou3
       {
         auto gpr = bin_to_gpr(bin);
 
-        GRP_rep diff;
+        GPR_rep diff;
         for (int k = 0; k < L + 1; k++)
           diff[k] = gpr[k] ? -1 : 0;
 
@@ -231,7 +231,7 @@ namespace untou3
     // [f]. [f] is specified as a top row of Gelfand pattern [n_L,...,n_1,n_0]
     // N=n_L+...+n_0 must be equal to (n+1)*(n+2)/2, where n was used as an
     // argument of set_shell.
-    void generateU3Weights(const GRP_rep& gpr, uint64_t N,
+    void generateU3Weights(const GPR_rep& gpr, uint64_t N,
                            U3Weight weight = {0, 0, 0})
     {
       assert(std::accumulate(std::begin(gpr), std::end(gpr), 0) == N);
@@ -284,9 +284,9 @@ namespace untou3
     }
 
     // addition of 2 Gelfand pattern row representations:
-    static inline GRP_rep add_gpr(const GRP_rep& a, const GRP_rep& b)
+    static inline GPR_rep add_gpr(const GPR_rep& a, const GPR_rep& b)
     {
-      GRP_rep res;
+      GPR_rep res;
 
       for (int k = 0; k <= L; k++)
         res[k] = a[k] + b[k];
@@ -295,9 +295,9 @@ namespace untou3
     }
 
     // transformation of binary mask into Gelfand pattern row representation:
-    static inline GRP_rep bin_to_gpr(uint64_t n)
+    static inline GPR_rep bin_to_gpr(uint64_t n)
     {
-      GRP_rep res;
+      GPR_rep res;
 
       for (int k = 0; k <= L; k++)
         res[L - k] = (n >> k) & 0x01;
@@ -306,7 +306,7 @@ namespace untou3
     }
 
     // transformation of Gelfand pattern row representation to binary mask:
-    static inline uint64_t gpr_to_bin(const GRP_rep& gpr)
+    static inline uint64_t gpr_to_bin(const GPR_rep& gpr)
     {
       uint64_t res = 0;
 
@@ -328,7 +328,7 @@ namespace untou3
     {
       mult_.clear();
 
-      auto N = (n + 1) * (n + 2) / 2;
+      auto N = (n_ + 1) * (n_ + 2) / 2;
 
       assert(std::accumulate(std::begin(gpr), std::end(gpr), 0) == N);
 
@@ -337,7 +337,10 @@ namespace untou3
 
     int multiplicity(u3::irrep i) const
     {
-      U3Weight w = {i.n13(), i.n23(), n.n33()};
+      U3Weight w = {static_cast<uint32_t>(i.n13()),
+                    static_cast<uint32_t>(i.n23()),
+                    static_cast<uint32_t>(i.n33())};
+
       return getLevelDimensionality(w);
     }
 
@@ -351,7 +354,8 @@ namespace untou3
 
         if (Dl > 0)
         {
-          u3::irrep i = {w[0], w[1], w[2]};
+          u3::irrep i = {static_cast<int>(w[0]), static_cast<int>(w[1]),
+                         static_cast<int>(w[2])};
 
           assert(i.check());
 

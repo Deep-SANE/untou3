@@ -335,6 +335,19 @@ namespace untou3
       generateU3Weights(gpr, N);
     }
 
+    void reduceU4(const u4::irrep& i, int N)
+    {
+      assert(N == (n_ + 1) * (n_ + 2) / 2);
+
+      GPR_rep rep = {static_cast<int16_t>(i.n44()),
+                     static_cast<int16_t>(i.n34() - i.n44()),
+                     static_cast<int16_t>(i.n24() - i.n34()),
+                     static_cast<int16_t>(i.n14() - i.n24()),
+                     static_cast<int16_t>(N - i.n14())};
+
+      reduce(rep);
+    }
+
     int multiplicity(u3::irrep i) const
     {
       U3Weight w = {static_cast<uint32_t>(i.n13()),

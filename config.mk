@@ -10,6 +10,10 @@ ifdef U4LIB_DIR
 CXXFLAGS += -I$(U4LIB_DIR)/include
 endif
 
+ifdef QCX_UTILS_DIR
+CXXFLAGS += -I$(QCX_UTILS_DIR)/include
+endif
+
 ifdef HAVE_BOOST
 CXXFLAGS += -DHAVE_BOOST
 ifdef BOOST_ROOT

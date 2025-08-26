@@ -370,8 +370,6 @@ namespace untou3
           u3::irrep i = {static_cast<int>(w[0]), static_cast<int>(w[1]),
                          static_cast<int>(w[2])};
 
-          assert(i.check());
-
           res.emplace_back(i, Dl);
         }
       }

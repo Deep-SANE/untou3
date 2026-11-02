@@ -55,7 +55,6 @@ path and include `UNtoU3.h`. The following program reduces the U(6) irrep
 [4,2,2,2,2,0]:
 
 ```cpp
-#include <cstdint>
 #include <iostream>
 
 #include <UNtoU3.h>
@@ -66,75 +65,90 @@ int main()
   untou3::UNtoU3<4> gen;
 
   // HO level eta = 2, i.e., N = (eta+1)(eta+2)/2 = 6
-  gen.generateXYZ(2);
+  gen.set_shell(2);
 
   // input U(6) irrep [4,2,2,2,2,0] given by R = [r4,r3,r2,r1,r0] = [1,0,4,0,1]
-  gen.generateU3Weights({1, 0, 4, 0, 1}, 6);
+  gen.reduce({1, 0, 4, 0, 1});
 
-  uint64_t total_dim = 0;
+  long total_dim = 0;
 
-  // iterate over the generated U(3) weights; the level dimensionality is
-  // nonzero only for those that are U(3) irreps
-  for (const auto& [weight, mult] : gen.multMap())
-    if (auto D_l = gen.getLevelDimensionality(weight))
-    {
-      uint64_t e1 = weight[0], e2 = weight[1], e3 = weight[2];
-      uint64_t dim = (e1 - e2 + 1) * (e1 - e3 + 2) * (e2 - e3 + 1) / 2;
-
-      std::cout << "[" << e1 << "," << e2 << "," << e3 << "] : D_l = " << D_l
-                << ", dim = " << dim << "\n";
-
-      total_dim += D_l * dim;
-    }
+  // resulting U(3) irreps and their level dimensionalities
+  for (const auto& [i, m] : gen.irreps())
+  {
+    std::cout << i << " : mult = " << m << ", dim = " << i.dim() << "\n";
+    total_dim += static_cast<long>(m) * i.dim();
+  }
 
   std::cout << "total dim = " << total_dim << "\n";
+
+  // level dimensionality of a single U(3) irrep
+  std::cout << "mult [10,8,6] = " << gen.multiplicity({10, 8, 6}) << "\n";
 }
 ```
 
-Compiled with `g++ -std=c++20 -O2 -I include example.cpp`, it prints the
-following (the order of lines is unspecified; sorted here):
+Compiled with `g++ -std=c++20 -O2 -I include example.cpp`, it prints:
 
 ```text
-[8,8,8] : D_l = 1, dim = 1
-[9,8,7] : D_l = 1, dim = 8
-[10,8,6] : D_l = 3, dim = 27
-[10,9,5] : D_l = 1, dim = 35
-[10,10,4] : D_l = 1, dim = 28
-[11,7,6] : D_l = 1, dim = 35
-[11,8,5] : D_l = 1, dim = 64
-[12,6,6] : D_l = 1, dim = 28
-[12,8,4] : D_l = 1, dim = 125
+[8,8,8] : mult = 1, dim = 1
+[9,8,7] : mult = 1, dim = 8
+[10,8,6] : mult = 3, dim = 27
+[10,9,5] : mult = 1, dim = 35
+[10,10,4] : mult = 1, dim = 28
+[11,7,6] : mult = 1, dim = 35
+[11,8,5] : mult = 1, dim = 64
+[12,6,6] : mult = 1, dim = 28
+[12,8,4] : mult = 1, dim = 125
 total dim = 405
+mult [10,8,6] = 3
 ```
 
 which agrees with dim[4,2,2,2,2,0] = 405.
 
+The conjugated reduction takes a U(4) irrep and reduces the conjugate U(N)
+irrep (with the transposed Young diagram). For the U(4) irrep [5,5,1,1] and
+N = 6, the conjugate U(6) irrep is [4,2,2,2,2,0], so the following gives the
+same U(3) irreps as above (see `src/test_u4_5511.cpp`):
+
+```cpp
+untou3::UNtoU3<4> gen;
+gen.set_shell(2);
+gen.reduceU4({5, 5, 1, 1});
+auto res = gen.irreps();
+```
+
 ### API
 
-All functionality is provided by the class template `untou3::UNtoU3<L>`, where
-`L` is the maximum U(N) label.
+The reduction is provided by the class template `untou3::UNtoU3<L>`, where `L`
+is the maximum U(N) label:
 
 | Member | Description |
 |---|---|
-| `void generateXYZ(int n)` | Prepares the HO quanta of the `n`-th HO level. Must be called first. |
-| `void generateU3Weights(R, uint64_t N)` | Generates all U(3) weights of the U(N) irrep given by `R = {r_L, ..., r_0}` with their multiplicities; `N` must be equal to (n+1)(n+2)/2. |
-| `const U3MultMap& multMap() const` | The generated U(3) weights (`std::array<uint32_t, 3>`) and their multiplicities. |
-| `uint64_t getLevelDimensionality(const U3Weight& w) const` | Level dimensionality D_l of `w`, nonzero only if `w` is a U(3) irrep contained in [f]; `w` must be taken from `multMap()`. |
+| `void set_shell(int n)` | Selects the `n`-th HO level, N = (n+1)(n+2)/2. Must be called first. |
+| `void reduce(const GPR_rep& R)` | Reduces the U(N) irrep given by `R = {r_L, ..., r_0}` (`GPR_rep` is `std::array<int16_t, L + 1>`); the counts must sum to N. Replaces the results of any previous reduction. |
+| `void reduceU4(const U4Irrep& i)` | Reduces the U(N) irrep conjugate to the U(4) irrep `i`. Available for `L = 4`. |
+| `std::vector<std::pair<U3Irrep, int>> irreps() const` | The resulting U(3) irreps with their level dimensionalities, sorted by the irreps. |
+| `int multiplicity(const U3Irrep& i) const` | Level dimensionality of a single U(3) irrep `i`; 0 if `i` is not contained in the reduced irrep. |
 
-Notes:
+Irreps are represented by two simple types:
 
-- Results of successive `generateU3Weights` calls accumulate. Use a new
-  `UNtoU3` object for each input U(N) irrep.
-- `multMap()` is an unordered map; its iteration order is unspecified.
-- `L = 4` is the case described in the paper and covered by the test programs.
-  The template parameter allows other values, but these are untested.
+| Type | Description |
+|---|---|
+| `untou3::U3Irrep` | U(3) irrep [e1,e2,e3] with members `e1`, `e2`, `e3`, `dim()`, comparison operators, and `operator<<` printing `[e1,e2,e3]`. |
+| `untou3::U4Irrep` | U(4) irrep [f1,f2,f3,f4] with members `f1`, ..., `f4`, comparison operators, and `operator<<`. |
+
+One `UNtoU3` object can be reused for any number of reductions, also for
+different HO levels. `L = 4` is the case described in the paper and covered by
+the test programs; the template parameter allows other values, but these are
+untested.
 
 ## Building the test programs
 
-The repository contains two test/benchmark programs in `src/`:
+The repository contains three test/benchmark programs in `src/`:
 
 - `test_10401.cpp` reduces the U(6) irrep [4,2,2,2,2,0] and prints the resulting
   U(3) irreps with their level dimensionalities.
+- `test_u4_5511.cpp` performs the conjugated reduction of the U(4) irrep
+  [5,5,1,1] for N = 6.
 - `test_input.cpp` reads η and R = [r4,r3,r2,r1,r0] from the standard input,
   performs the reduction, and prints the total dimension of the resulting U(3)
   irreps.
@@ -147,6 +161,7 @@ repository root, and the compiler flags, including `-std=c++20`, are taken from
 export UNTOU3_DIR=$PWD CXXFLAGS="-std=c++20 -O2"
 make
 bin/test_10401
+bin/test_u4_5511
 echo "2 1 0 4 0 1" | bin/test_input
 ```
 
@@ -232,9 +247,9 @@ If you use UNtoU3 in your work, please cite the paper above:
 ## Branches
 
 - `main`: the standalone library described here.
-- `qcx`: a variant integrated with the QCX libraries (u3lib, u4lib). It adds a
-  higher-level interface based on their U(3) and U(4) irrep types, including the
-  conjugated U(4) → U(3) reduction.
+- `qcx`: a variant integrated with the QCX libraries (u3lib, u4lib). It has the
+  same interface, but uses their U(3) and U(4) irrep types (`u3::irrep`,
+  `u4::irrep`) instead of `U3Irrep` and `U4Irrep`.
 
 ## License
 

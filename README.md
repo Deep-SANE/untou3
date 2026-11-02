@@ -163,7 +163,7 @@ template checks these requirements with the concepts `untou3::U3IrrepType` and
 `untou3::U4IrrepType`.
 
 For example, the following makes `UNtoU3` work with the irrep types `u3::irrep`
-and `u4::irrep` of the QCX libraries u3lib and u4lib, whose labels are accessed
+and `u4::irrep` of the libraries u3lib and u4lib, whose labels are accessed
 by `n13()`, …, `n33()` and `n14()`, …, `n44()`:
 
 ```cpp
@@ -306,15 +306,6 @@ If you use UNtoU3 in your work, please cite the paper above:
   J. P. Draayer, Y. Leschber, S. C. Park, R. Lopez, *Representations of U(3) in
   U(N)*, Comput. Phys. Commun. 56, 279–290 (1989),
   [doi:10.1016/0010-4655(89)90024-6](https://doi.org/10.1016/0010-4655(89)90024-6).
-
-## Branches
-
-- `main`: the library described here.
-- `qcx` (**deprecated**, to be removed): an earlier variant integrated with the
-  QCX libraries, which uses their irrep types `u3::irrep` and `u4::irrep`. The
-  same is now possible with `main` and `IrrepTraits` (see
-  [Using other irrep types](#using-other-irrep-types)), which does not require
-  a separate branch. The `qcx` branch is kept for a transition period only.
 
 ## License
 

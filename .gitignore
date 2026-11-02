@@ -1,0 +1,33 @@
+# files with extensions in all directories:
+
+*.a
+*.aux
+*.bbl
+*.blg
+*.docx
+*.exe
+*.fdb_latexmk
+*.fls
+*.log
+*.o
+*.out
+*.pdf
+*.so
+*.swp
+*.xlsx
+
+# '.DS_Store' file in all directories:
+
+.DS_Store
+
+# all built executable binary files:
+
+bin/
+
+# GDB history file:
+
+.gdb_history
+
+# Jupyter notebook checkpoints:
+
+.ipynb_checkpoints

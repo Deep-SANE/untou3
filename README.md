@@ -118,18 +118,23 @@ auto res = gen.irreps();
 
 ### API
 
-The reduction is provided by the class template `untou3::UNtoU3<L>`, where `L`
-is the maximum U(N) label:
+The reduction is provided by the class template
+`untou3::UNtoU3<L, U3 = U3Irrep, U4 = U4Irrep>`, where `L` is the maximum U(N)
+label and `U3` and `U4` are the types representing U(3) and U(4) irreps (see
+[Using other irrep types](#using-other-irrep-types)):
 
 | Member | Description |
 |---|---|
 | `void set_shell(int n)` | Selects the `n`-th HO level, N = (n+1)(n+2)/2. Must be called first. |
+| `int shell() const` | The HO level selected by `set_shell()` (-1 if none). |
 | `void reduce(const GPR_rep& R)` | Reduces the U(N) irrep given by `R = {r_L, ..., r_0}` (`GPR_rep` is `std::array<int16_t, L + 1>`); the counts must sum to N. Replaces the results of any previous reduction. |
-| `void reduceU4(const U4Irrep& i)` | Reduces the U(N) irrep conjugate to the U(4) irrep `i`. Available for `L = 4`. |
-| `std::vector<std::pair<U3Irrep, int>> irreps() const` | The resulting U(3) irreps with their level dimensionalities, sorted by the irreps. |
-| `int multiplicity(const U3Irrep& i) const` | Level dimensionality of a single U(3) irrep `i`; 0 if `i` is not contained in the reduced irrep. |
+| `void reduceU4(const U4& i)` | Reduces the U(N) irrep conjugate to the U(4) irrep `i`. Available for `L = 4`. |
+| `void reduceU4(const U4& i, int N)` | The same, with `N` given explicitly; it must match the selected HO level. |
+| `std::vector<std::pair<U3, int>> irreps() const` | The resulting U(3) irreps with their level dimensionalities, sorted by the irrep labels. |
+| `int multiplicity(const U3& i) const` | Level dimensionality of a single U(3) irrep `i`; 0 if `i` is not contained in the reduced irrep. |
 
-Irreps are represented by two simple types:
+The member types `u3_irrep` and `u4_irrep` are `U3` and `U4`. By default, irreps
+are represented by two simple types:
 
 | Type | Description |
 |---|---|
@@ -141,14 +146,71 @@ different HO levels. `L = 4` is the case described in the paper and covered by
 the test programs; the template parameter allows other values, but these are
 untested.
 
+### Using other irrep types
+
+`UNtoU3` can work directly with irrep types of another library. It accesses
+irreps only through `untou3::IrrepTraits`, which is specialized for `U3Irrep`
+and `U4Irrep`. For other types, provide specializations with these static
+member functions:
+
+- for a U(3) irrep type `T`: `std::array<int, 3> labels(const T&)`, returning
+  {e1, e2, e3}, and `T make(int e1, int e2, int e3)`, creating the irrep;
+- for a U(4) irrep type `T`: `std::array<int, 4> labels(const T&)`, returning
+  {f1, f2, f3, f4}.
+
+The types do not need to be default-constructible or comparable. The class
+template checks these requirements with the concepts `untou3::U3IrrepType` and
+`untou3::U4IrrepType`.
+
+For example, the following makes `UNtoU3` work with the irrep types `u3::irrep`
+and `u4::irrep` of the QCX libraries u3lib and u4lib, whose labels are accessed
+by `n13()`, …, `n33()` and `n14()`, …, `n44()`:
+
+```cpp
+#include <U3basis.h>
+#include <U4basis.h>
+#include <UNtoU3.h>
+
+template <>
+struct untou3::IrrepTraits<u3::irrep>
+{
+  static std::array<int, 3> labels(const u3::irrep& i)
+  {
+    return {i.n13(), i.n23(), i.n33()};
+  }
+
+  static u3::irrep make(int e1, int e2, int e3) { return {e1, e2, e3}; }
+};
+
+template <>
+struct untou3::IrrepTraits<u4::irrep>
+{
+  static std::array<int, 4> labels(const u4::irrep& i)
+  {
+    return {i.n14(), i.n24(), i.n34(), i.n44()};
+  }
+};
+
+// UNtoU3 with u3lib and u4lib irrep types:
+template <int L>
+using UNtoU3 = untou3::UNtoU3<L, u3::irrep, u4::irrep>;
+```
+
+With this, `irreps()` returns `u3::irrep` objects, and `reduceU4()` and
+`multiplicity()` accept `u4::irrep` and `u3::irrep`. `src/test_custom_irreps.cpp`
+shows the same with simple user-defined types.
+
 ## Building the test programs
 
-The repository contains three test/benchmark programs in `src/`:
+The repository contains four test/benchmark programs in `src/`:
 
 - `test_10401.cpp` reduces the U(6) irrep [4,2,2,2,2,0] and prints the resulting
   U(3) irreps with their level dimensionalities.
 - `test_u4_5511.cpp` performs the conjugated reduction of the U(4) irrep
   [5,5,1,1] for N = 6.
+- `test_custom_irreps.cpp` performs both reductions with user-defined irrep
+  types plugged in by `IrrepTraits` and checks that the results agree with the
+  default types.
 - `test_input.cpp` reads η and R = [r4,r3,r2,r1,r0] from the standard input,
   performs the reduction, and prints the total dimension of the resulting U(3)
   irreps.
@@ -162,6 +224,7 @@ export UNTOU3_DIR=$PWD CXXFLAGS="-std=c++20 -O2"
 make
 bin/test_10401
 bin/test_u4_5511
+bin/test_custom_irreps
 echo "2 1 0 4 0 1" | bin/test_input
 ```
 
@@ -246,10 +309,12 @@ If you use UNtoU3 in your work, please cite the paper above:
 
 ## Branches
 
-- `main`: the standalone library described here.
-- `qcx`: a variant integrated with the QCX libraries (u3lib, u4lib). It has the
-  same interface, but uses their U(3) and U(4) irrep types (`u3::irrep`,
-  `u4::irrep`) instead of `U3Irrep` and `U4Irrep`.
+- `main`: the library described here.
+- `qcx` (**deprecated**, to be removed): an earlier variant integrated with the
+  QCX libraries, which uses their irrep types `u3::irrep` and `u4::irrep`. The
+  same is now possible with `main` and `IrrepTraits` (see
+  [Using other irrep types](#using-other-irrep-types)), which does not require
+  a separate branch. The `qcx` branch is kept for a transition period only.
 
 ## License
 

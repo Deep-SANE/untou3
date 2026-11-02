@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -49,11 +50,61 @@ namespace untou3
              << "]";
   }
 
+  // Traits that tell UNtoU3 how to work with a type representing U(3) or U(4)
+  // irreps. To use UNtoU3 with other irrep types than U3Irrep and U4Irrep,
+  // specialize IrrepTraits for them:
+  //
+  // - for a U(3) irrep type T:
+  //     static std::array<int, 3> labels(const T& i); // returns {e1,e2,e3}
+  //     static T make(int e1, int e2, int e3);        // creates [e1,e2,e3]
+  //
+  // - for a U(4) irrep type T:
+  //     static std::array<int, 4> labels(const T& i); // returns {f1,f2,f3,f4}
+  template <typename T>
+  struct IrrepTraits;
+
+  template <>
+  struct IrrepTraits<U3Irrep>
+  {
+    static std::array<int, 3> labels(const U3Irrep& i)
+    {
+      return {i.e1, i.e2, i.e3};
+    }
+
+    static U3Irrep make(int e1, int e2, int e3) { return {e1, e2, e3}; }
+  }; // struct IrrepTraits<U3Irrep>
+
+  template <>
+  struct IrrepTraits<U4Irrep>
+  {
+    static std::array<int, 4> labels(const U4Irrep& i)
+    {
+      return {i.f1, i.f2, i.f3, i.f4};
+    }
+  }; // struct IrrepTraits<U4Irrep>
+
+  // type T can represent U(3) irreps in UNtoU3:
+  template <typename T>
+  concept U3IrrepType = requires(const T& i, int e) {
+    { IrrepTraits<T>::labels(i) } -> std::convertible_to<std::array<int, 3>>;
+    { IrrepTraits<T>::make(e, e, e) } -> std::convertible_to<T>;
+  };
+
+  // type T can represent U(4) irreps in UNtoU3:
+  template <typename T>
+  concept U4IrrepType = requires(const T& i) {
+    { IrrepTraits<T>::labels(i) } -> std::convertible_to<std::array<int, 4>>;
+  };
+
   // L = maximum value of U(N) label
-  template <int L>
+  // U3, U4 = types representing U(3) and U(4) irreps (see IrrepTraits)
+  template <int L, U3IrrepType U3 = U3Irrep, U4IrrepType U4 = U4Irrep>
   class UNtoU3
   {
   public:
+    using u3_irrep = U3; // type representing U(3) irreps
+    using u4_irrep = U4; // type representing U(4) irreps
+
     // Type for representation of a Gelfand pattern row.
     //
     // r[0] is the number of 'L's in the row.
@@ -363,6 +414,9 @@ namespace untou3
       n_ = n;
     }
 
+    // HO level set by set_shell() (-1 if not set yet).
+    int shell() const { return n_; }
+
     // U(N) to U(3) reduction of an input U(N) irrep [f] given by its
     // representation gpr = {r_L,...,r_0}, where r_k is the number of labels
     // equal to k and r_L+...+r_0 = N. Replaces results of previous reductions.
@@ -382,59 +436,72 @@ namespace untou3
     // Conjugated U(4) to U(3) reduction: reduces the U(N) irrep conjugate to
     // the input U(4) irrep i (the transposed Young diagram), where N is given
     // by the HO level set by set_shell().
-    void reduceU4(const U4Irrep& i)
+    void reduceU4(const U4& i)
       requires(L == 4)
     {
       assert(n_ >= 0);
 
       int N = (n_ + 1) * (n_ + 2) / 2;
 
-      assert((i.f1 >= i.f2) && (i.f2 >= i.f3) && (i.f3 >= i.f4) &&
-             (i.f4 >= 0));
-      assert(i.f1 <= N);
+      auto [f1, f2, f3, f4] = IrrepTraits<U4>::labels(i);
 
-      GPR_rep rep = {static_cast<int16_t>(i.f4),
-                     static_cast<int16_t>(i.f3 - i.f4),
-                     static_cast<int16_t>(i.f2 - i.f3),
-                     static_cast<int16_t>(i.f1 - i.f2),
-                     static_cast<int16_t>(N - i.f1)};
+      assert((f1 >= f2) && (f2 >= f3) && (f3 >= f4) && (f4 >= 0));
+      assert(f1 <= N);
+
+      GPR_rep rep = {static_cast<int16_t>(f4), static_cast<int16_t>(f3 - f4),
+                     static_cast<int16_t>(f2 - f3),
+                     static_cast<int16_t>(f1 - f2),
+                     static_cast<int16_t>(N - f1)};
 
       reduce(rep);
     }
 
+    // The same as reduceU4(i), with N passed explicitly; N must be equal to
+    // (n+1)*(n+2)/2 for the HO level n set by set_shell().
+    void reduceU4(const U4& i, [[maybe_unused]] int N)
+      requires(L == 4)
+    {
+      assert(N == (n_ + 1) * (n_ + 2) / 2);
+
+      reduceU4(i);
+    }
+
     // Level dimensionality (multiplicity) of the U(3) irrep i in the reduced
     // U(N) irrep. Returns 0 if i is not contained in it.
-    int multiplicity(const U3Irrep& i) const
+    int multiplicity(const U3& i) const
     {
-      if (i.e3 < 0)
+      auto [e1, e2, e3] = IrrepTraits<U3>::labels(i);
+
+      if (e3 < 0)
         return 0;
 
-      U3Weight w = {static_cast<uint32_t>(i.e1), static_cast<uint32_t>(i.e2),
-                    static_cast<uint32_t>(i.e3)};
+      U3Weight w = {static_cast<uint32_t>(e1), static_cast<uint32_t>(e2),
+                    static_cast<uint32_t>(e3)};
 
       return getLevelDimensionality(w);
     }
 
     // Resulting U(3) irreps of the last reduction together with their level
-    // dimensionalities (multiplicities), sorted by the U(3) irreps.
-    std::vector<std::pair<U3Irrep, int>> irreps() const
+    // dimensionalities (multiplicities), sorted by the U(3) irrep labels.
+    std::vector<std::pair<U3, int>> irreps() const
     {
-      std::vector<std::pair<U3Irrep, int>> res;
+      std::vector<std::pair<U3Weight, int>> found;
 
       for (const auto& [w, m] : mult_)
-      {
-        auto Dl = getLevelDimensionality(w);
+        if (auto Dl = getLevelDimensionality(w); Dl > 0)
+          found.emplace_back(w, Dl);
 
-        if (Dl > 0)
-        {
-          U3Irrep i = {static_cast<int>(w[0]), static_cast<int>(w[1]),
-                       static_cast<int>(w[2])};
+      // sorting by labels does not require comparison of U3 objects:
+      std::sort(found.begin(), found.end());
 
-          res.emplace_back(i, Dl);
-        }
-      }
+      std::vector<std::pair<U3, int>> res;
+      res.reserve(found.size());
 
-      std::sort(res.begin(), res.end());
+      for (const auto& [w, Dl] : found)
+        res.emplace_back(IrrepTraits<U3>::make(static_cast<int>(w[0]),
+                                               static_cast<int>(w[1]),
+                                               static_cast<int>(w[2])),
+                         Dl);
 
       return res;
     }
